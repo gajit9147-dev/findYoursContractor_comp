@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import api from '../services/api';
 
 const ContractsContext = createContext();
 
@@ -10,167 +11,127 @@ export const useContracts = () => {
     return context;
 };
 
-// Mock contracts data
-const mockContracts = [
-    {
-        id: 1,
-        title: 'Steel Frame Fabrication for Commercial Building',
-        description: 'Need experienced structural steel fabricators for a 5-story commercial building project. Must have experience with large-scale projects.',
-        category: 'structural',
-        budget: 50000,
-        deadline: '2026-03-15',
-        location: 'Mumbai, Maharashtra',
-        company: 'BuildTech Solutions',
-        postedDate: '2026-01-10',
-        applicants: 12,
-        status: 'open',
-        drawings: [],
-    },
-    {
-        id: 2,
-        title: 'Stainless Steel Piping Installation',
-        description: 'Looking for SS piping specialists for pharmaceutical plant. Food-grade SS304 piping work.',
-        category: 'piping',
-        budget: 35000,
-        deadline: '2026-02-28',
-        location: 'Pune, Maharashtra',
-        company: 'PharmaTech Industries',
-        postedDate: '2026-01-12',
-        applicants: 8,
-        status: 'open',
-        drawings: [],
-    },
-    {
-        id: 3,
-        title: 'Welding Work for MS Structures',
-        description: 'Certified welders needed for mild steel structure fabrication. TIG and MIG welding required.',
-        category: 'welding',
-        budget: 25000,
-        deadline: '2026-02-20',
-        location: 'Bangalore, Karnataka',
-        company: 'Metro Fabricators',
-        postedDate: '2026-01-08',
-        applicants: 15,
-        status: 'open',
-        drawings: [],
-    },
-    {
-        id: 4,
-        title: 'Industrial Equipment Maintenance Contract',
-        description: 'Long-term maintenance contract for industrial fabrication equipment. Quarterly servicing required.',
-        category: 'maintenance',
-        budget: 80000,
-        deadline: '2026-12-31',
-        location: 'Chennai, Tamil Nadu',
-        company: 'Industrial Solutions Ltd',
-        postedDate: '2026-01-05',
-        applicants: 5,
-        status: 'open',
-        drawings: [],
-    },
-    {
-        id: 5,
-        title: 'MS Gate and Railing Fabrication',
-        description: 'Residential project requiring decorative MS gates and railings. Design skills preferred.',
-        category: 'ms',
-        budget: 15000,
-        deadline: '2026-02-10',
-        location: 'Delhi NCR',
-        company: 'Home Designs Co',
-        postedDate: '2026-01-13',
-        applicants: 20,
-        status: 'open',
-        drawings: [],
-    },
-    {
-        id: 6,
-        title: 'SS Kitchen Equipment Fabrication',
-        description: 'Commercial kitchen setup requiring stainless steel tables, shelves, and custom equipment.',
-        category: 'ss',
-        budget: 40000,
-        deadline: '2026-03-01',
-        location: 'Hyderabad, Telangana',
-        company: 'Hotel Supplies Inc',
-        postedDate: '2026-01-11',
-        applicants: 10,
-        status: 'open',
-        drawings: [],
-    },
-];
-
 export const ContractsProvider = ({ children }) => {
-    const [contracts, setContracts] = useState(mockContracts);
+    const [contracts, setContracts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [filters, setFilters] = useState({
         category: 'all',
         location: '',
         budgetMin: 0,
-        budgetMax: 100000,
+        budgetMax: 1000000,
         deadline: null,
         searchKeyword: '',
     });
 
-    const addContract = (contractData) => {
-        const newContract = {
-            ...contractData,
-            id: contracts.length + 1,
-            postedDate: new Date().toISOString().split('T')[0],
-            applicants: 0,
-            status: 'open',
-        };
-        setContracts(prev => [newContract, ...prev]);
-        return newContract;
+    const fetchContracts = useCallback(async () => {
+        try {
+            setLoading(true);
+            setError(null);
+
+            // Build query params
+            const params = new URLSearchParams();
+            if (filters.category !== 'all') params.append('category', filters.category);
+            if (filters.location) params.append('city', filters.location);
+            if (filters.budgetMin > 0) params.append('budgetMin', filters.budgetMin);
+            if (filters.budgetMax < 1000000) params.append('budgetMax', filters.budgetMax);
+            if (filters.searchKeyword) params.append('keyword', filters.searchKeyword);
+
+            const response = await api.get(`/contracts?${params.toString()}`);
+
+            // Map backend data to frontend component expectations
+            const mappedContracts = response.data.data.contracts.map(c => ({
+                id: c._id,
+                title: c.title,
+                description: c.description,
+                category: c.category,
+                budget: c.budgetMax, // Using max budget for display
+                budgetMin: c.budgetMin,
+                budgetMax: c.budgetMax,
+                deadline: new Date(c.deadlineDate).toLocaleDateString(),
+                location: `${c.locationCity}, ${c.locationState}`,
+                company: c.company?.name || 'Unknown Company',
+                postedDate: new Date(c.createdAt).toLocaleDateString(),
+                applicants: c.applicantCount || 0,
+                status: c.status,
+                raw: c // Keep original for details if needed
+            }));
+
+            setContracts(mappedContracts);
+        } catch (err) {
+            console.error('Error fetching contracts:', err);
+            setError(err.response?.data?.message || 'Failed to fetch contracts');
+        } finally {
+            setLoading(false);
+        }
+    }, [filters]);
+
+    useEffect(() => {
+        fetchContracts();
+    }, [fetchContracts]);
+
+    const addContract = async (contractData) => {
+        try {
+            const response = await api.post('/contracts', contractData);
+            await fetchContracts(); // Refresh list
+            return { success: true, data: response.data.data };
+        } catch (err) {
+            return {
+                success: false,
+                message: err.response?.data?.message || 'Failed to create contract'
+            };
+        }
     };
 
-    const updateContract = (id, updates) => {
-        setContracts(prev =>
-            prev.map(contract =>
-                contract.id === id ? { ...contract, ...updates } : contract
-            )
-        );
+    const updateContract = async (id, updates) => {
+        try {
+            await api.patch(`/contracts/${id}`, updates);
+            await fetchContracts();
+            return { success: true };
+        } catch (err) {
+            return {
+                success: false,
+                message: err.response?.data?.message || 'Failed to update contract'
+            };
+        }
     };
 
-    const deleteContract = (id) => {
-        setContracts(prev => prev.filter(contract => contract.id !== id));
+    const deleteContract = async (id) => {
+        try {
+            await api.delete(`/contracts/${id}`);
+            await fetchContracts();
+            return { success: true };
+        } catch (err) {
+            return {
+                success: false,
+                message: err.response?.data?.message || 'Failed to delete contract'
+            };
+        }
     };
 
-    const applyToContract = (contractId) => {
-        updateContract(contractId, {
-            applicants: contracts.find(c => c.id === contractId).applicants + 1
-        });
+    const applyToContract = async (contractId, applicationData) => {
+        try {
+            await api.post(`/contracts/${contractId}/apply`, applicationData);
+            await fetchContracts(); // Refresh to update applicant count
+            return { success: true };
+        } catch (err) {
+            return {
+                success: false,
+                message: err.response?.data?.message || 'Failed to apply'
+            };
+        }
     };
 
     const getFilteredContracts = () => {
-        return contracts.filter(contract => {
-            // Category filter
-            if (filters.category !== 'all' && contract.category !== filters.category) {
-                return false;
-            }
-
-            // Location filter
-            if (filters.location && !contract.location.toLowerCase().includes(filters.location.toLowerCase())) {
-                return false;
-            }
-
-            // Budget filter
-            if (contract.budget < filters.budgetMin || contract.budget > filters.budgetMax) {
-                return false;
-            }
-
-            // Search keyword
-            if (filters.searchKeyword) {
-                const keyword = filters.searchKeyword.toLowerCase();
-                const searchableText = `${contract.title} ${contract.description} ${contract.company}`.toLowerCase();
-                if (!searchableText.includes(keyword)) {
-                    return false;
-                }
-            }
-
-            return true;
-        });
+        // Since the backend handles filtering now via query params in fetchContracts,
+        // we just return the contracts we have.
+        return contracts;
     };
 
     const value = {
         contracts,
+        loading,
+        error,
         filters,
         setFilters,
         addContract,
@@ -178,6 +139,7 @@ export const ContractsProvider = ({ children }) => {
         deleteContract,
         applyToContract,
         getFilteredContracts,
+        refreshContracts: fetchContracts
     };
 
     return <ContractsContext.Provider value={value}>{children}</ContractsContext.Provider>;

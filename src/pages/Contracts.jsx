@@ -4,14 +4,17 @@ import { useContracts } from '../contexts/ContractsContext';
 import ContractCard from '../components/ContractCard';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
-import { Briefcase, Filter, X, DollarSign, MapPin, Tag, Calendar } from 'lucide-react';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { toast } from 'react-hot-toast';
+import { Briefcase, Filter, X, DollarSign, MapPin, Tag, Calendar, AlertCircle, RefreshCw } from 'lucide-react';
 
 const Contracts = () => {
     const navigate = useNavigate();
-    const { getFilteredContracts, filters, setFilters, applyToContract } = useContracts();
+    const { getFilteredContracts, filters, setFilters, applyToContract, loading, error, refreshContracts } = useContracts();
     const [showFilters, setShowFilters] = useState(false);
     const [selectedContract, setSelectedContract] = useState(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
+    const [applyingId, setApplyingId] = useState(null);
 
     const filteredContracts = getFilteredContracts();
 
@@ -30,9 +33,26 @@ const Contracts = () => {
         setShowDetailsModal(true);
     };
 
-    const handleApply = (contractId) => {
-        applyToContract(contractId);
-        alert('Application submitted successfully!');
+    const handleApply = async (contractId) => {
+        setApplyingId(contractId);
+        try {
+            const result = await applyToContract(contractId, {
+                bidAmount: selectedContract?.budgetMax || 0,
+                proposedDays: 30,
+                message: 'I am interested in this contract.'
+            });
+
+            if (result.success) {
+                toast.success('Application submitted successfully!');
+                setShowDetailsModal(false);
+            } else {
+                toast.error(result.message);
+            }
+        } catch (err) {
+            toast.error('Something went wrong. Please try again.');
+        } finally {
+            setApplyingId(null);
+        }
     };
 
     const clearFilters = () => {
@@ -40,7 +60,7 @@ const Contracts = () => {
             category: 'all',
             location: '',
             budgetMin: 0,
-            budgetMax: 100000,
+            budgetMax: 1000000,
             deadline: null,
             searchKeyword: '',
         });
@@ -50,10 +70,31 @@ const Contracts = () => {
         let count = 0;
         if (filters.category !== 'all') count++;
         if (filters.location) count++;
-        if (filters.budgetMin > 0 || filters.budgetMax < 100000) count++;
+        if (filters.budgetMin > 0 || filters.budgetMax < 1000000) count++;
         if (filters.searchKeyword) count++;
         return count;
     };
+
+    if (error) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                <div className="text-center max-w-md w-full bg-white p-8 rounded-2xl shadow-lg border border-red-100">
+                    <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <AlertCircle className="w-8 h-8 text-red-500" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Oops! Something went wrong</h2>
+                    <p className="text-gray-600 mb-6">{error}</p>
+                    <button
+                        onClick={refreshContracts}
+                        className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-all shadow-md"
+                    >
+                        <RefreshCw className="w-5 h-5" />
+                        Try Again
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -65,7 +106,7 @@ const Contracts = () => {
                             Browse Contracts
                         </h1>
                         <p className="text-gray-600">
-                            {filteredContracts.length} contract{filteredContracts.length !== 1 ? 's' : ''} available
+                            {loading ? 'Refreshing list...' : `${filteredContracts.length} contract${filteredContracts.length !== 1 ? 's' : ''} available`}
                         </p>
                     </div>
 
@@ -99,9 +140,23 @@ const Contracts = () => {
                             </div>
 
                             <div className="space-y-6">
+                                {/* Search */}
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Search
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="Keywords..."
+                                        value={filters.searchKeyword}
+                                        onChange={(e) => setFilters({ ...filters, searchKeyword: e.target.value })}
+                                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
                                 {/* Category Filter */}
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                    <label className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                                         <Tag className="w-4 h-4" />
                                         Category
                                     </label>
@@ -120,7 +175,7 @@ const Contracts = () => {
 
                                 {/* Location Filter */}
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                    <label className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                                         <MapPin className="w-4 h-4" />
                                         Location
                                     </label>
@@ -135,29 +190,25 @@ const Contracts = () => {
 
                                 {/* Budget Range */}
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                    <label className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                                         <DollarSign className="w-4 h-4" />
-                                        Budget Range
+                                        Max Budget
                                     </label>
                                     <div className="space-y-3">
                                         <input
-                                            type="number"
-                                            placeholder="Min Budget"
-                                            value={filters.budgetMin}
-                                            onChange={(e) => setFilters({ ...filters, budgetMin: parseInt(e.target.value) || 0 })}
-                                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        />
-                                        <input
-                                            type="number"
-                                            placeholder="Max Budget"
+                                            type="range"
+                                            min="0"
+                                            max="1000000"
+                                            step="10000"
                                             value={filters.budgetMax}
-                                            onChange={(e) => setFilters({ ...filters, budgetMax: parseInt(e.target.value) || 100000 })}
-                                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            onChange={(e) => setFilters({ ...filters, budgetMax: parseInt(e.target.value) })}
+                                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                                         />
-                                    </div>
-                                    <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                                        <span>₹{filters.budgetMin.toLocaleString()}</span>
-                                        <span>₹{filters.budgetMax.toLocaleString()}</span>
+                                        <div className="flex items-center justify-between text-xs text-gray-500">
+                                            <span>₹0</span>
+                                            <span className="font-bold text-gray-900 text-sm">₹{filters.budgetMax.toLocaleString()}</span>
+                                            <span>₹10L+</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -166,7 +217,11 @@ const Contracts = () => {
 
                     {/* Contract Grid */}
                     <div className="flex-1">
-                        {filteredContracts.length > 0 ? (
+                        {loading && filteredContracts.length === 0 ? (
+                            <div className="bg-white rounded-xl shadow-md p-12 flex items-center justify-center">
+                                <LoadingSpinner size="large" />
+                            </div>
+                        ) : filteredContracts.length > 0 ? (
                             <div className="grid md:grid-cols-2 gap-6">
                                 {filteredContracts.map(contract => (
                                     <ContractCard
@@ -213,8 +268,8 @@ const Contracts = () => {
                         {/* Details Grid */}
                         <div className="grid md:grid-cols-2 gap-4">
                             <div className="bg-blue-50 rounded-lg p-4">
-                                <p className="text-sm text-gray-600 mb-1">Budget</p>
-                                <p className="text-2xl font-bold text-blue-600">₹{selectedContract.budget.toLocaleString()}</p>
+                                <p className="text-sm text-gray-600 mb-1">Max Budget</p>
+                                <p className="text-2xl font-bold text-blue-600">₹{selectedContract.budgetMax?.toLocaleString() || selectedContract.budget.toLocaleString()}</p>
                             </div>
                             <div className="bg-purple-50 rounded-lg p-4">
                                 <p className="text-sm text-gray-600 mb-1">Deadline</p>
@@ -239,13 +294,18 @@ const Contracts = () => {
                         {/* Apply Button */}
                         <div className="pt-4 border-t border-gray-200">
                             <button
-                                onClick={() => {
-                                    handleApply(selectedContract.id);
-                                    setShowDetailsModal(false);
-                                }}
-                                className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-md"
+                                onClick={() => handleApply(selectedContract.id)}
+                                disabled={applyingId === selectedContract.id}
+                                className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed"
                             >
-                                Apply to This Contract
+                                {applyingId === selectedContract.id ? (
+                                    <div className="flex items-center justify-center gap-2">
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        Processing...
+                                    </div>
+                                ) : (
+                                    'Apply to This Contract'
+                                )}
                             </button>
                         </div>
                     </div>

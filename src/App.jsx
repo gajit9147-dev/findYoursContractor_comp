@@ -6,6 +6,7 @@ import { WorkersProvider } from './contexts/WorkersContext';
 import { AuthProvider } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
+import { Toaster } from 'react-hot-toast';
 
 // Page Components
 import Home from './pages/Home';
@@ -42,6 +43,7 @@ const Layout = ({ children }) => {
 function App() {
     return (
         <Router>
+            <Toaster position="top-right" reverseOrder={false} />
             <AuthProvider>
                 <UserProvider>
                     <ContractsProvider>

@@ -57,48 +57,77 @@ exports.getContracts = async (req, res) => {
     try {
         const { keyword, city, category, budgetMin, budgetMax, status, page = 1, limit = 20 } = req.query;
 
-        // Build filter object
-        const filter = {};
+        // Build match filter
+        const matchFilter = {};
 
         if (keyword) {
-            filter.$or = [
+            matchFilter.$or = [
                 { title: new RegExp(keyword, 'i') },
                 { description: new RegExp(keyword, 'i') }
             ];
         }
 
         if (city) {
-            filter.locationCity = new RegExp(city, 'i');
+            matchFilter.locationCity = new RegExp(city, 'i');
         }
 
         if (category) {
-            filter.category = category;
+            matchFilter.category = category;
         }
 
         if (budgetMin || budgetMax) {
-            filter.budgetMin = {};
-            if (budgetMin) filter.budgetMin.$gte = parseInt(budgetMin);
-            if (budgetMax) filter.budgetMax = { $lte: parseInt(budgetMax) };
+            matchFilter.budgetMin = {};
+            if (budgetMin) matchFilter.budgetMin.$gte = parseInt(budgetMin);
+            if (budgetMax) matchFilter.budgetMax = { $lte: parseInt(budgetMax) };
         }
 
         if (status) {
-            filter.status = status;
+            matchFilter.status = status;
         } else {
-            // Default to showing only open contracts
-            filter.status = 'open';
+            matchFilter.status = 'open';
         }
 
         // Pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
-        // Query contracts
-        const contracts = await Contract.find(filter)
-            .populate('companyUserId', 'name email phone')
-            .limit(parseInt(limit))
-            .skip(skip)
-            .sort({ createdAt: -1 });
+        // Aggregation pipeline to get contracts with applicant count
+        const contracts = await Contract.aggregate([
+            { $match: matchFilter },
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: parseInt(limit) },
+            {
+                $lookup: {
+                    from: 'applications',
+                    localField: '_id',
+                    foreignField: 'contractId',
+                    as: 'applications'
+                }
+            },
+            {
+                $addFields: {
+                    applicantCount: { $size: '$applications' }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'companyUserId',
+                    foreignField: '_id',
+                    as: 'company'
+                }
+            },
+            { $unwind: '$company' },
+            {
+                $project: {
+                    applications: 0,
+                    'company.passwordHash': 0,
+                    'company.authProviders': 0
+                }
+            }
+        ]);
 
-        const total = await Contract.countDocuments(filter);
+        const total = await Contract.countDocuments(matchFilter);
 
         res.status(200).json({
             success: true,
