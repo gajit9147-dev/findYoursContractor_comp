@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useUser } from '../contexts/UserContext';
+import { useAuth } from '../contexts/AuthContext';
 import {
     Menu, X, Search, MapPin, ChevronDown, Bell,
     MessageSquare, User, Settings, LogOut, Briefcase
@@ -17,7 +18,9 @@ import {
  * - Sticky header with glassmorphism effect
  */
 const Navbar = () => {
+    const navigate = useNavigate();
     const { userRole, toggleRole } = useUser();
+    const { user, logout } = useAuth();
 
     // State management
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -222,10 +225,12 @@ const Navbar = () => {
 
                     {/* RIGHT SECTION - CTA, Icons, User Avatar */}
                     <div className="hidden lg:flex items-center space-x-4">
-                        {/* Role Badge */}
-                        <span className="px-3 py-1 text-xs font-semibold text-blue-600 bg-blue-50 rounded-full">
-                            {userRole === 'company' ? 'Company' : 'Worker'}
-                        </span>
+                        {/* UserCode Badge */}
+                        {user && (
+                            <span className="px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-purple-600 rounded-full shadow-sm">
+                                {user.userCode}
+                            </span>
+                        )}
 
                         {/* Primary CTA Button */}
                         <NavLink
@@ -266,15 +271,21 @@ const Navbar = () => {
                                 aria-label="User menu"
                                 aria-expanded={isAvatarDropdownOpen}
                             >
-                                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
-                                    <User className="w-5 h-5" />
+                                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                    {user?.name?.charAt(0).toUpperCase() || 'U'}
                                 </div>
                                 <ChevronDown className={`w-4 h-4 text-gray-600 transition-transform ${isAvatarDropdownOpen ? 'rotate-180' : ''}`} />
                             </button>
 
                             {/* Avatar Dropdown Menu */}
                             {isAvatarDropdownOpen && (
-                                <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
+                                <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-50">
+                                    {/* User Info */}
+                                    <div className="px-4 py-3 border-b border-gray-100">
+                                        <p className="text-sm font-semibold text-gray-900">{user?.name || 'User'}</p>
+                                        <p className="text-xs text-gray-500 mt-0.5">{user?.email || user?.phone}</p>
+                                        <p className="text-xs font-mono text-blue-600 mt-1">{user?.userCode}</p>
+                                    </div>
                                     <NavLink
                                         to="/dashboard"
                                         className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
@@ -309,7 +320,11 @@ const Navbar = () => {
                                     <hr className="my-1 border-gray-200" />
                                     <button
                                         className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                                        onClick={() => console.log('Logout clicked')}
+                                        onClick={() => {
+                                            logout();
+                                            setIsAvatarDropdownOpen(false);
+                                            navigate('/login');
+                                        }}
                                     >
                                         <LogOut className="w-4 h-4" />
                                         Logout
@@ -467,7 +482,11 @@ const Navbar = () => {
 
                             <button
                                 className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                onClick={() => console.log('Logout clicked')}
+                                onClick={() => {
+                                    logout();
+                                    setIsMobileMenuOpen(false);
+                                    navigate('/login');
+                                }}
                             >
                                 <LogOut className="w-4 h-4" />
                                 Logout
